@@ -7,13 +7,25 @@
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+import matplotlib
 from sklearn.linear_model import LinearRegression
 from sklearn.metrics import mean_squared_error, r2_score
 import os
 
-# ============ 配置中文字体 ============
-plt.rcParams['font.sans-serif'] = ['SimHei', 'DejaVu Sans']
-plt.rcParams['axes.unicode_minus'] = False
+# ============ 配置中文字体（macOS 优化版） ============
+matplotlib.rcParams['axes.unicode_minus'] = False
+
+# macOS 优先使用系统苹方字体，其次才是其他中文字体
+plt.rcParams['font.sans-serif'] = [
+    'PingFang SC',          # ← macOS 自带，最清晰
+    'STHeiti',              # 华文黑体
+    'Arial Unicode MS',
+    'Noto Sans CJK SC',
+    'Noto Sans CJK JP',
+    'WenQuanYi Zen Hei',
+    'SimHei',
+    'DejaVu Sans'
+]
 
 # ============ 1. 数据加载与探索 ============
 print("="*60)
