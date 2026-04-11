@@ -219,5 +219,7 @@ Thumbs.db
 
 .code/
 *.png
-*.xls;xlsx;csv
+*.xls
+*.xlsx
+*.csv
 
