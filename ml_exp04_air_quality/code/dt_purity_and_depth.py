@@ -7,6 +7,7 @@
 
 import numpy as np
 import pandas as pd
+import matplotlib
 import matplotlib.pyplot as plt
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.preprocessing import LabelEncoder
@@ -17,9 +18,13 @@ import warnings
 
 warnings.filterwarnings('ignore')
 
-# ============ 配置中文字体 ============
-plt.rcParams['font.sans-serif'] = ['SimHei', 'DejaVu Sans']
-plt.rcParams['axes.unicode_minus'] = False
+# ── 0. 中文字体配置（跨平台） ─────────────────────────────────────────────
+matplotlib.rcParams['axes.unicode_minus'] = False
+plt.rcParams['font.sans-serif'] = [
+    'SimHei', 'STHeiti', 'Noto Sans CJK SC', 'Noto Sans CJK JP',
+    'WenQuanYi Zen Hei', 'Arial Unicode MS', 'DejaVu Sans'
+]
+
 
 # ============ 1. 绘制信息熵与基尼系数函数 ============
 print("="*60)
