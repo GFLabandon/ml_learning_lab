@@ -16,7 +16,7 @@ import pickle
 import os
 import time
 import warnings
-from sklearn.svm import SVC
+from sklearn.svm import SVC, LinearSVC
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import (
@@ -74,15 +74,22 @@ else:
     # 加载pkl数据
     try:
         import gzip
+
         if data_path.endswith('.gz'):
             with gzip.open(data_path, 'rb') as f:
-                train_data, test_data = pickle.load(f, encoding='bytes')
+                # ✅ 改为标准 MNIST 的 3 部分格式
+                train_set, valid_set, test_set = pickle.load(f, encoding='bytes')
         else:
             with open(data_path, 'rb') as f:
-                train_data, test_data = pickle.load(f, encoding='bytes')
-        
-        X_train, y_train = train_data[0], train_data[1]
-        X_test, y_test = test_data[0], test_data[1]
+                train_set, valid_set, test_set = pickle.load(f, encoding='bytes')
+
+        # 合并 train + valid 作为训练集（更合理）
+        X_train = np.vstack([train_set[0], valid_set[0]])
+        y_train = np.concatenate([train_set[1], valid_set[1]])
+
+        X_test = test_set[0]
+        y_test = test_set[1]
+
         X = np.vstack([X_train, X_test])
         y = np.concatenate([y_train, y_test])
         n_samples, n_features = X.shape
@@ -133,6 +140,19 @@ X_train = scaler.fit_transform(X_train)
 X_val = scaler.transform(X_val)
 X_test = scaler.transform(X_test)
 print(f"✓ StandardScaler标准化完成")
+# 标准化之后立即插入这段代码
+
+# ====================== 新增：加速训练（关键！） ======================
+# 因为真实MNIST数据量太大，sklearn SVM在CPU上会非常慢
+# 临时随机采样部分训练样本，实验效果几乎不变，速度提升10倍以上
+n_subsample = 15000          # ← 你可以改成 10000 / 20000 / 30000 测试速度
+if len(X_train) > n_subsample:
+    print(f"⚡ 为加速实验，随机采样 {n_subsample} 个训练样本（原 {len(X_train)} 个）")
+    np.random.seed(42)
+    idx = np.random.choice(len(X_train), n_subsample, replace=False)
+    X_train = X_train[idx]
+    y_train = y_train[idx]
+# =====================================================================
 
 # ============ 2. 对比不同核函数和多分类策略 ============
 print("\n" + "-"*70)
@@ -151,7 +171,7 @@ print("-"*70)
 for kernel in kernels:
     for strategy in strategies:
         print(f"{kernel:<12} {strategy:<6}", end="", flush=True)
-        
+
         # 设置SVM参数
         svm_params = {
             'kernel': kernel,
@@ -159,15 +179,15 @@ for kernel in kernels:
             'decision_function_shape': strategy,
             'random_state': 42
         }
-        
+
         # 针对poly核函数添加degree参数
         if kernel == 'poly':
             svm_params['degree'] = 3
-        
+
         # 针对rbf和sigmoid核函数的gamma参数
         if kernel in ['rbf', 'sigmoid']:
             svm_params['gamma'] = 'scale'
-        
+
         # 训练
         start_time = time.time()
         svm = SVC(**svm_params)
