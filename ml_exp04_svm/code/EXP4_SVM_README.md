@@ -158,7 +158,7 @@ import pickle
 import gzip
 
 # 加载数据
-with gzip.open('手写数字识别/mnist.pkl.gz', 'rb') as f:
+with gzip.open('mnist.pkl.gz', 'rb') as f:
     train_data, valid_data, test_data = pickle.load(f, encoding='bytes')
 
 X_train, y_train = train_data[0], train_data[1]
