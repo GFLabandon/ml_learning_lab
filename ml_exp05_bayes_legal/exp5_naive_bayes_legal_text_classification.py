@@ -76,46 +76,115 @@ if data_path is None:
         'labels': ['案由', '诉讼请求', '事实与理由', '案由', '诉讼请求', '案由', '法院查明', '诉讼请求']
     }
 else:
-    # 加载真实数据
+    def append_sample(data_norm, text, label='未分类'):
+        """安全追加样本，过滤空值。"""
+        if text is None:
+            return
+        text = str(text).strip()
+        if not text:
+            return
+        data_norm['texts'].append(text)
+        data_norm['labels'].append(str(label).strip() or '未分类')
+
+    def normalize_dataset(data_raw):
+        """将原始JSON数据统一转换为 {'texts': [...], 'labels': [...]} 格式。"""
+        data_norm = {'texts': [], 'labels': []}
+
+        if isinstance(data_raw, list):
+            for item in data_raw:
+                if isinstance(item, dict):
+                    text = item.get('text') or item.get('content') or item.get('文本') or item.get('内容')
+                    label = (
+                        item.get('label') or item.get('category') or item.get('标签')
+                        or item.get('type') or item.get('类别') or '未分类'
+                    )
+                    if text:
+                        append_sample(data_norm, text, label)
+                    else:
+                        # 兼容 {"案由":"xxx","诉讼请求":"yyy","事实与理由":"zzz"} 等“字段名即类别名”格式
+                        for k, v in item.items():
+                            if isinstance(v, str) and v.strip():
+                                if k in {'案由', '诉讼请求', '事实与理由', '法院查明', '审理查明'}:
+                                    append_sample(data_norm, v, k)
+                                # 单键值文本对象：{"some_label": "some_text"}
+                                elif len(item) == 1:
+                                    append_sample(data_norm, v, k)
+        elif isinstance(data_raw, dict):
+            if 'texts' in data_raw and 'labels' in data_raw:
+                texts = data_raw.get('texts', [])
+                labels = data_raw.get('labels', [])
+                if isinstance(texts, list) and isinstance(labels, list):
+                    paired_len = min(len(texts), len(labels))
+                    for i in range(paired_len):
+                        append_sample(data_norm, texts[i], labels[i])
+            else:
+                for _, value in data_raw.items():
+                    if isinstance(value, dict):
+                        text = value.get('text') or value.get('content') or value.get('文本') or value.get('内容')
+                        label = (
+                            value.get('label') or value.get('category') or value.get('标签')
+                            or value.get('type') or value.get('类别') or '未分类'
+                        )
+                        if text:
+                            append_sample(data_norm, text, label)
+                        else:
+                            for k, v in value.items():
+                                if isinstance(v, str) and v.strip() and k in {'案由', '诉讼请求', '事实与理由', '法院查明', '审理查明'}:
+                                    append_sample(data_norm, v, k)
+                    elif isinstance(value, str) and value.strip():
+                        # 兼容 {"案由":"...", "诉讼请求":"..."} 的顶层对象
+                        append_sample(data_norm, value, _)
+
+        return data_norm
+
+    # 加载真实数据（优先标准 JSON，失败后尝试 JSON Lines）
     try:
         with open(data_path, 'r', encoding='utf-8') as f:
             data_raw = json.load(f)
-        
-        # 处理数据格式
-        if isinstance(data_raw, list):
-            # 如果是列表格式
-            data = {'texts': [], 'labels': []}
-            for item in data_raw:
-                if isinstance(item, dict):
-                    # 提取文本和标签
-                    if 'text' in item or 'content' in item:
-                        text = item.get('text') or item.get('content')
-                        label = item.get('label') or item.get('category') or '未分类'
-                        data['texts'].append(text)
-                        data['labels'].append(label)
-        elif isinstance(data_raw, dict):
-            # 如果是字典格式
-            if 'texts' in data_raw and 'labels' in data_raw:
-                data = data_raw
-            else:
-                # 尝试提取
-                data = {'texts': [], 'labels': []}
-                for key, value in data_raw.items():
-                    if isinstance(value, dict) and 'text' in value:
-                        data['texts'].append(value['text'])
-                        data['labels'].append(value.get('label', '未分类'))
-        
+        data = normalize_dataset(data_raw)
+        if not data['texts']:
+            raise ValueError("标准 JSON 解析成功，但未提取到有效文本样本。")
         print(f"✓ 数据加载成功")
+    except json.JSONDecodeError:
+        print("⚠️  标准 JSON 解析失败，尝试按 JSON Lines 格式加载...")
+        try:
+            data_raw = []
+            with open(data_path, 'r', encoding='utf-8') as f:
+                for line in f:
+                    line = line.strip()
+                    if line:
+                        data_raw.append(json.loads(line))
+            data = normalize_dataset(data_raw)
+            if not data['texts']:
+                raise ValueError("JSON Lines 解析成功，但未提取到有效文本样本。")
+            print("✓ JSON Lines 数据加载成功")
+        except Exception as e:
+            print(f"✗ 加载数据失败：{e}")
+            print("使用模拟数据进行演示")
+            data = {
+                'texts': [
+                    "本案系离婚纠纷案件。原告与被告于2000年登记结婚，婚后感情逐渐破裂，经过多次调解无效，原告决定诉讼离婚。",
+                    "再次强调，本案属于典型的离婚纠纷，双方长期分居，调解后仍无法和好。",
+                    "原告请求：一、判决原告与被告离婚；二、分割共同财产房产一套；三、孩子抚养权归原告。",
+                    "诉讼请求包括依法判决离婚、确认抚养权归属并公平分割夫妻共同财产。",
+                    "事实与理由：1. 夫妻感情已完全破裂；2. 被告长期外出，无故不归；3. 财产分割应当公平。",
+                    "事实与理由补充：被告存在家庭暴力行为，导致婚姻关系难以继续。",
+                ],
+                'labels': ['案由', '案由', '诉讼请求', '诉讼请求', '事实与理由', '事实与理由']
+            }
     except Exception as e:
         print(f"✗ 加载数据失败：{e}")
         print("使用模拟数据进行演示")
         data = {
             'texts': [
                 "本案系离婚纠纷案件。原告与被告于2000年登记结婚，婚后感情逐渐破裂，经过多次调解无效，原告决定诉讼离婚。",
+                "再次强调，本案属于典型的离婚纠纷，双方长期分居，调解后仍无法和好。",
                 "原告请求：一、判决原告与被告离婚；二、分割共同财产房产一套；三、孩子抚养权归原告。",
+                "诉讼请求包括依法判决离婚、确认抚养权归属并公平分割夫妻共同财产。",
                 "事实与理由：1. 夫妻感情已完全破裂；2. 被告长期外出，无故不归；3. 财产分割应当公平。",
+                "事实与理由补充：被告存在家庭暴力行为，导致婚姻关系难以继续。",
             ],
-            'labels': ['案由', '诉讼请求', '事实与理由']
+            'labels': ['案由', '案由', '诉讼请求', '诉讼请求', '事实与理由', '事实与理由']
         }
 
 # 数据预处理
@@ -203,17 +272,30 @@ print("第四步：数据划分")
 print("-"*70)
 
 # 划分为训练集和测试集（80%-20%）
+label_counts = Counter(y)
+min_class_count = min(label_counts.values()) if label_counts else 0
+num_classes = len(label_counts)
+test_size = 0.2
+test_count = int(np.ceil(len(y) * test_size))
+
+use_stratify = (min_class_count >= 2) and (test_count >= num_classes)
+stratify_target = y if use_stratify else None
+
+if not use_stratify:
+    print("⚠️  当前数据规模/类别分布不满足分层抽样条件，已自动切换为普通随机划分。")
+
 X_bow_train, X_bow_test, y_train, y_test = train_test_split(
-    X_bow, y, test_size=0.2, random_state=42, stratify=y
+    X_bow, y, test_size=test_size, random_state=42, stratify=stratify_target
 )
 X_tfidf_train, X_tfidf_test, _, _ = train_test_split(
-    X_tfidf, y, test_size=0.2, random_state=42, stratify=y
+    X_tfidf, y, test_size=test_size, random_state=42, stratify=stratify_target
 )
 
 print(f"✓ 数据划分完成：")
-print(f"  训练集：{len(X_bow_train)} 样本")
-print(f"  测试集：{len(X_bow_test)} 样本")
-print(f"  类别分布（训练集）：{dict(zip(label_encoder.classes_, np.bincount(y_train)))}")
+print(f"  训练集：{X_bow_train.shape[0]} 样本")
+print(f"  测试集：{X_bow_test.shape[0]} 样本")
+train_class_distribution = {label_encoder.inverse_transform([k])[0]: v for k, v in Counter(y_train).items()}
+print(f"  类别分布（训练集）：{train_class_distribution}")
 
 # ============ 5. 模型训练与评估 ============
 print("\n" + "-"*70)
@@ -302,7 +384,14 @@ y_test_pred = best_result['y_test_pred']
 cm = confusion_matrix(y_test, y_test_pred)
 
 print(f"\n✓ 分类报告（测试集）：")
-print(classification_report(y_test, y_test_pred, target_names=label_encoder.classes_, digits=4))
+print(classification_report(
+    y_test,
+    y_test_pred,
+    labels=np.arange(len(label_encoder.classes_)),
+    target_names=label_encoder.classes_,
+    digits=4,
+    zero_division=0
+))
 
 # 计算指标
 precision = precision_score(y_test, y_test_pred, average='weighted', zero_division=0)
@@ -319,19 +408,30 @@ print("\n" + "-"*70)
 print("第八步：交叉验证")
 print("-"*70)
 
-# 5折交叉验证
-cv_scores = cross_val_score(
-    MultinomialNB(alpha=1.0),
-    best_result['X_train'],
-    y_train,
-    cv=5,
-    scoring='accuracy'
-)
+# 自适应交叉验证折数（避免小样本报错）
+train_min_class_count = min(Counter(y_train).values()) if len(y_train) > 0 else 0
+cv_folds = min(5, train_min_class_count)
 
-print(f"✓ 5折交叉验证结果：")
+if cv_folds >= 2:
+    cv_scores = cross_val_score(
+        MultinomialNB(alpha=1.0),
+        best_result['X_train'],
+        y_train,
+        cv=cv_folds,
+        scoring='accuracy'
+    )
+    cv_mean = cv_scores.mean()
+    cv_std = cv_scores.std()
+    print(f"✓ {cv_folds}折交叉验证结果：")
+else:
+    cv_scores = np.array([best_result['test_acc']])
+    cv_mean = cv_scores.mean()
+    cv_std = 0.0
+    print("⚠️  训练集中每类样本不足2个，无法执行交叉验证，使用测试集准确率作为参考值。")
+
 print(f"  各折准确率：{[f'{score:.4f}' for score in cv_scores]}")
-print(f"  平均准确率：{cv_scores.mean():.4f}")
-print(f"  标准差：{cv_scores.std():.4f}")
+print(f"  平均准确率：{cv_mean:.4f}")
+print(f"  标准差：{cv_std:.4f}")
 
 # ============ 9. 创建结果对比表 ============
 print("\n" + "-"*70)
@@ -428,6 +528,7 @@ for bar in bars:
 # 子图4：混淆矩阵热力图
 ax4 = axes[1, 1]
 cm_normalized = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
+cm_normalized = np.nan_to_num(cm_normalized)
 
 if len(label_encoder.classes_) <= 10:
     im = ax4.imshow(cm_normalized, cmap='Blues', aspect='auto')
@@ -507,8 +608,8 @@ print(f"""
   
 【模型表现分析】
   • 过拟合度：{(train_accs[0] - test_accs[0]):.4f}
-  • 交叉验证平均准确率：{cv_scores.mean():.4f}
-  • 模型稳定性：{'良好' if cv_scores.std() < 0.05 else '需改进'}
+  • 交叉验证平均准确率：{cv_mean:.4f}
+  • 模型稳定性：{'良好' if cv_std < 0.05 else '需改进'}
   
 【改进建议】
   1. 增加训练样本量，特别是少数类样本
