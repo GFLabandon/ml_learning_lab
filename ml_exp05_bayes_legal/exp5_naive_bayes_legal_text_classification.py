@@ -76,6 +76,7 @@ if data_path is None:
         'labels': ['案由', '诉讼请求', '事实与理由', '案由', '诉讼请求', '案由', '法院查明', '诉讼请求']
     }
 else:
+
     def append_sample(data_norm, text, label='未分类'):
         """安全追加样本，过滤空值。"""
         if text is None:
@@ -86,6 +87,7 @@ else:
         data_norm['texts'].append(text)
         data_norm['labels'].append(str(label).strip() or '未分类')
 
+ main
     def normalize_dataset(data_raw):
         """将原始JSON数据统一转换为 {'texts': [...], 'labels': [...]} 格式。"""
         data_norm = {'texts': [], 'labels': []}
@@ -93,6 +95,7 @@ else:
         if isinstance(data_raw, list):
             for item in data_raw:
                 if isinstance(item, dict):
+
                     text = item.get('text') or item.get('content') or item.get('文本') or item.get('内容')
                     label = (
                         item.get('label') or item.get('category') or item.get('标签')
@@ -109,12 +112,20 @@ else:
                                 # 单键值文本对象：{"some_label": "some_text"}
                                 elif len(item) == 1:
                                     append_sample(data_norm, v, k)
+
+                    text = item.get('text') or item.get('content') or item.get('文本')
+                    label = item.get('label') or item.get('category') or item.get('标签') or '未分类'
+                    if text:
+                        data_norm['texts'].append(str(text))
+                        data_norm['labels'].append(str(label))
+
         elif isinstance(data_raw, dict):
             if 'texts' in data_raw and 'labels' in data_raw:
                 texts = data_raw.get('texts', [])
                 labels = data_raw.get('labels', [])
                 if isinstance(texts, list) and isinstance(labels, list):
                     paired_len = min(len(texts), len(labels))
+
                     for i in range(paired_len):
                         append_sample(data_norm, texts[i], labels[i])
             else:
@@ -292,8 +303,13 @@ X_tfidf_train, X_tfidf_test, _, _ = train_test_split(
 )
 
 print(f"✓ 数据划分完成：")
+
 print(f"  训练集：{X_bow_train.shape[0]} 样本")
 print(f"  测试集：{X_bow_test.shape[0]} 样本")
+
+print(f"  训练集：{len(X_bow_train)} 样本")
+print(f"  测试集：{len(X_bow_test)} 样本")
+
 train_class_distribution = {label_encoder.inverse_transform([k])[0]: v for k, v in Counter(y_train).items()}
 print(f"  类别分布（训练集）：{train_class_distribution}")
 
