@@ -83,8 +83,19 @@ else:
         if isinstance(data_raw, list):
             for item in data_raw:
                 if isinstance(item, dict):
-                    text = item.get('text') or item.get('content') or item.get('文本')
-                    label = item.get('label') or item.get('category') or item.get('标签') or '未分类'
+                    text = (
+                            item.get('text') or
+                            item.get('content') or
+                            item.get('文本') or
+                            item.get('sentence')  # ✅ 加这一行
+                    )
+
+                    label = (
+                            item.get('label') or
+                            item.get('category') or
+                            item.get('标签') or
+                            (item.get('labels')[0] if item.get('labels') else '未分类')  # ✅ 适配你的数据
+                    )
                     if text:
                         data_norm['texts'].append(str(text))
                         data_norm['labels'].append(str(label))
@@ -262,8 +273,8 @@ X_tfidf_train, X_tfidf_test, _, _ = train_test_split(
 )
 
 print(f"✓ 数据划分完成：")
-print(f"  训练集：{len(X_bow_train)} 样本")
-print(f"  测试集：{len(X_bow_test)} 样本")
+print(f"  训练集：{X_bow_train.shape[0]} 样本")
+print(f"  测试集：{X_bow_test.shape[0]} 样本")
 train_class_distribution = {label_encoder.inverse_transform([k])[0]: v for k, v in Counter(y_train).items()}
 print(f"  类别分布（训练集）：{train_class_distribution}")
 
@@ -351,7 +362,11 @@ print("-"*70)
 y_test_pred = best_result['y_test_pred']
 
 # 混淆矩阵
-cm = confusion_matrix(y_test, y_test_pred)
+cm = confusion_matrix(
+    y_test,
+    y_test_pred,
+    labels=np.arange(len(label_encoder.classes_))
+)
 
 print(f"\n✓ 分类报告（测试集）：")
 print(classification_report(
@@ -508,10 +523,12 @@ if len(label_encoder.classes_) <= 10:
     ax4.set_yticklabels(label_encoder.classes_, fontsize=9)
     
     # 添加数值
-    for i in range(len(label_encoder.classes_)):
-        for j in range(len(label_encoder.classes_)):
-            text = ax4.text(j, i, f'{cm_normalized[i, j]:.2f}',
-                          ha="center", va="center", color="black", fontsize=8)
+    num_classes = cm.shape[0]
+
+    for i in range(num_classes):
+        for j in range(num_classes):
+            ax4.text(j, i, f'{cm_normalized[i, j]:.2f}',
+                     ha="center", va="center", color="black", fontsize=8)
     
     plt.colorbar(im, ax=ax4)
 else:
